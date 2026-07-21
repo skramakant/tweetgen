@@ -77,15 +77,15 @@ function getOrCreateClipSheet() {
  */
 function addClipRow(sheet, videoUrl, videoTitle, clipTitle, start, end, summary) {
   var rowIndex = sheet.getLastRow() + 1;
+  // Set text format BEFORE writing so Sheets cannot auto-convert timestamps
+  sheet.getRange(rowIndex, CL_COL_START).setNumberFormat('@');
+  sheet.getRange(rowIndex, CL_COL_END).setNumberFormat('@');
   sheet.getRange(rowIndex, 1, 1, 11).setValues([[
     videoUrl, videoTitle, clipTitle,
     start, end, 'pending',
     '', '', new Date().toISOString(),
     summary || '', ''
   ]]);
-  // Force start/end columns to text so Sheets doesn't convert "1:10:00" to a date
-  sheet.getRange(rowIndex, CL_COL_START).setNumberFormat('@');
-  sheet.getRange(rowIndex, CL_COL_END).setNumberFormat('@');
   return rowIndex;
 }
 

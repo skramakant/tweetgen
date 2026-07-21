@@ -86,7 +86,15 @@ function analyseTranscriptWithGroq(videoTitle, transcript) {
       return { error: 'Groq returned no clips. Try a longer or more structured transcript.' };
     }
 
-    // ── Sort by start time and compute end times in code ──────────────────
+    // ── Deduplicate by start time, then sort and compute end times ──────────
+    var seen = {};
+    clips = clips.filter(function(c) {
+      var key = String(c.start || '').trim();
+      if (!key || seen[key]) return false;
+      seen[key] = true;
+      return true;
+    });
+
     clips.sort(function(a, b) {
       return _tsToSecs(String(a.start || '0')) - _tsToSecs(String(b.start || '0'));
     });

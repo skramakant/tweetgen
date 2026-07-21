@@ -69,19 +69,27 @@ def upload_to_drive(file_path, file_name):
 
 def normalize_timestamp(ts):
     """
-    Google Sheets auto-converts time strings like '1:10:00' into date objects
-    which GAS returns as 'Sat Dec 30 1899 01:10:00 GMT+0530 (...)'.
-    Extracts HH:MM:SS back for ffmpeg.
+    Google Sheets auto-converts time strings like '26:10' into date objects
+    or HH:MM:SS format. Extracts the correct MM:SS or HH:MM:SS back for ffmpeg.
     """
     ts = str(ts).strip()
     if not ts or ts == 'None':
         return '0:00'
+    # Google Sheets date format: "Sat Dec 30 1899 26:10:00 GMT+0530 (...)"
     if 'GMT' in ts or '1899' in ts or 'Standard Time' in ts:
-        # "Sat Dec 30 1899 01:10:00 GMT+0530 (India Standard Time)"
         parts = ts.split()
         for part in parts:
-            if re.match(r'^\d{1,2}:\d{2}:\d{2}$', part):
+            if re.match(r'^\d{1,3}:\d{2}:\d{2}$', part):
+                h, m, s = map(int, part.split(':'))
+                # If Sheets stored MM:SS as HH:MM:00, convert back to MM:SS
+                if h > 12 and s == 0:
+                    return str(h) + ':' + (str(m).zfill(2))
                 return part
+    # Plain HH:MM:SS where H > 12 and S == 0 means it was originally MM:SS
+    if re.match(r'^\d{1,3}:\d{2}:\d{2}$', ts):
+        h, m, s = map(int, ts.split(':'))
+        if h > 12 and s == 0:
+            return str(h) + ':' + (str(m).zfill(2))
     return ts
 
 
