@@ -43,11 +43,11 @@ function getOrCreateClipSheet() {
   var sheet = ss.getSheetByName('clips');
   if (!sheet) {
     sheet = ss.insertSheet('clips');
-    sheet.getRange(1, 1, 1, 11).setValues([[
+    sheet.getRange(1, 1, 1, 12).setValues([[
       'video url', 'video title', 'clip title',
       'start', 'end', 'status',
       'drive link', 'drive file id', 'created at',
-      'summary', 'error'
+      'summary', 'error', 'video file id'
     ]]);
     sheet.setFrozenRows(1);
     sheet.setColumnWidth(CL_COL_VIDEO_URL,   280);
