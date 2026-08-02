@@ -691,28 +691,48 @@
       <!-- ===== SHORT CLIPS TAB ===== -->
       <div id="tabClips" class="hidden">
 
-        <!-- ── Section 1: Analyse new video ── -->
+        <!-- ── Section 1: Videos in Drive ── -->
+        <div class="mb-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h2 class="text-sm font-semibold text-gray-700">Source videos</h2>
+              <p class="text-xs text-gray-400 mt-0.5">Drop videos in your Drive input folder, then scan to detect them</p>
+            </div>
+            <button id="videosScanBtn"
+              class="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-blue-500 rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+              </svg>
+              Scan folder
+            </button>
+          </div>
+          <div id="videosFeedback" class="hidden mb-2"></div>
+          <p id="videosLoading" class="hidden text-sm text-gray-500 text-center py-4">Scanning Drive folder…</p>
+          <div id="videosEmpty" class="hidden text-center py-6">
+            <p class="text-sm text-gray-400">No videos found. Upload a video to your Drive input folder and scan.</p>
+          </div>
+          <div id="videosList" class="hidden space-y-2"></div>
+        </div>
+
+        <hr class="border-gray-100 mb-5">
+
+        <!-- ── Section 2: Analyse transcript ── -->
         <div class="mb-6">
-          <h2 class="text-sm font-semibold text-gray-700 mb-3">Analyse video transcript</h2>
+          <h2 class="text-sm font-semibold text-gray-700 mb-3">Analyse transcript</h2>
 
           <div class="space-y-3">
             <div>
-              <label class="block text-xs font-medium text-gray-500 mb-1">YouTube URL</label>
-              <input type="url" id="clipsVideoUrl" placeholder="https://www.youtube.com/watch?v=..."
-                autocomplete="off"
-                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent">
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-500 mb-1">Video title <span class="font-normal text-gray-400">(optional — helps Groq suggest better titles)</span></label>
+              <label class="block text-xs font-medium text-gray-500 mb-1">Video title <span class="font-normal text-gray-400">(optional)</span></label>
               <input type="text" id="clipsVideoTitle" placeholder="e.g. How Netflix builds recommendation systems"
                 autocomplete="off"
                 class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent">
             </div>
             <div>
               <label class="block text-xs font-medium text-gray-500 mb-1">
-                Transcript <span class="font-normal text-gray-400">(paste from YouTube: ⋮ → Open transcript → Copy)</span>
+                Transcript or chapters <span class="font-normal text-gray-400">(paste chapters list or YouTube transcript)</span>
               </label>
-              <textarea id="clipsTranscript" rows="6" placeholder="0:00 Welcome to the channel&#10;0:05 Today we're going to talk about..."
+              <textarea id="clipsTranscript" rows="6"
+                placeholder="00:00 Intro&#10;04:18 Why Rockets Got Cheaper&#10;06:26 AI's Next Data Center..."
                 class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md resize-y focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent font-mono"></textarea>
             </div>
             <button id="clipsAnalyseBtn"
@@ -721,17 +741,25 @@
             </button>
           </div>
 
-          <p id="clipsAnalyseLoading" class="hidden mt-3 text-sm text-gray-500 text-center">Analysing transcript…</p>
+          <p id="clipsAnalyseLoading" class="hidden mt-3 text-sm text-gray-500 text-center">Analysing…</p>
           <div id="clipsAnalyseFeedback" class="hidden mt-3"></div>
 
           <!-- Suggested clips (shown after analysis) -->
           <div id="clipsSuggestions" class="hidden mt-4">
             <div class="flex items-center justify-between mb-2">
-              <p class="text-xs font-medium text-gray-600">Suggested clips — select and save to queue</p>
+              <p class="text-xs font-medium text-gray-600">Suggested clips — select video, then save to queue</p>
               <button id="clipsSaveSelectedBtn"
                 class="px-3 py-1.5 text-xs font-semibold text-white bg-green-500 rounded-md hover:bg-green-600 disabled:opacity-50 transition-colors">
                 Save selected
               </button>
+            </div>
+            <!-- Video selector for clips -->
+            <div class="mb-3 p-3 bg-blue-50 border border-blue-100 rounded-lg">
+              <label class="block text-xs font-medium text-blue-700 mb-1">Link clips to source video (optional)</label>
+              <select id="clipsSrcVideoSelect"
+                class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md bg-white focus:outline-none focus:ring-2 focus:ring-blue-400">
+                <option value="">— no video linked (clips only) —</option>
+              </select>
             </div>
             <div id="clipsSuggestionList" class="space-y-2"></div>
           </div>
@@ -739,7 +767,7 @@
 
         <hr class="border-gray-100 mb-5">
 
-        <!-- ── Section 2: Clips queue ── -->
+        <!-- ── Section 3: Clips queue ── -->
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-sm font-semibold text-gray-700">Clips queue</h2>
           <button id="clipsRefreshBtn"
@@ -754,7 +782,7 @@
         <div id="clipsFeedback" class="hidden mb-3"></div>
         <p id="clipsQueueLoading" class="hidden text-sm text-gray-500 text-center py-6">Loading clips…</p>
         <div id="clipsQueueEmpty" class="hidden text-center py-8">
-          <p class="text-sm text-gray-400">No clips yet. Analyse a video above to get started.</p>
+          <p class="text-sm text-gray-400">No clips yet. Analyse a transcript above to get started.</p>
         </div>
         <div id="clipsQueueList" class="hidden space-y-3"></div>
 
