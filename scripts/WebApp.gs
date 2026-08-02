@@ -886,10 +886,11 @@ function handleSaveClips(params) {
         sheet,
         videoUrl,
         videoTitle,
-        String(clip.clipTitle || '').trim(),
-        String(clip.start     || '').trim(),
-        String(clip.end       || '').trim(),
-        String(clip.summary   || '').trim()
+        String(clip.clipTitle   || '').trim(),
+        String(clip.start       || '').trim(),
+        String(clip.end         || '').trim(),
+        String(clip.summary     || '').trim(),
+        String(clip.videoFileId || '').trim()
       );
       rowIndices.push(idx);
     });
