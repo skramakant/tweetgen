@@ -1506,29 +1506,184 @@ function nextCronFire(cron) {
 // ============================================================
 
 (function initClipsTab() {
+  // ── Element refs ──────────────────────────────────────────────────────────
+  var scanBtn         = document.getElementById('videosScanBtn');
+  var videosFeedback  = document.getElementById('videosFeedback');
+  var videosLoading   = document.getElementById('videosLoading');
+  var videosEmpty     = document.getElementById('videosEmpty');
+  var videosList      = document.getElementById('videosList');
+
   var analyseBtn      = document.getElementById('clipsAnalyseBtn');
   var analyseLoading  = document.getElementById('clipsAnalyseLoading');
   var analyseFeedback = document.getElementById('clipsAnalyseFeedback');
   var suggestionsEl   = document.getElementById('clipsSuggestions');
   var suggestionList  = document.getElementById('clipsSuggestionList');
   var saveSelectedBtn = document.getElementById('clipsSaveSelectedBtn');
+  var srcVideoSelect  = document.getElementById('clipsSrcVideoSelect');
+
   var refreshBtn      = document.getElementById('clipsRefreshBtn');
   var clipsFeedback   = document.getElementById('clipsFeedback');
   var queueLoading    = document.getElementById('clipsQueueLoading');
   var queueEmpty      = document.getElementById('clipsQueueEmpty');
   var queueList       = document.getElementById('clipsQueueList');
 
-  var pendingSuggestions = []; // clips returned by Groq, not yet saved
+  var pendingSuggestions = [];
+  var knownVideos        = []; // cache for the video selector
 
-  // ── Analyse transcript ──────────────────────────────────────────────────
+  // ── Section 1: Videos ─────────────────────────────────────────────────────
+
+  function loadVideos(scan) {
+    scanBtn.disabled = true;
+    videosLoading.classList.remove('hidden');
+    videosList.classList.add('hidden');
+    videosEmpty.classList.add('hidden');
+    hideFeedback(videosFeedback);
+
+    var fn = scan ? scanInputFolder : listVideos;
+    fn()
+      .then(function(result) {
+        if (!result.success) {
+          showFeedback(videosFeedback, result.error || 'Failed.', 'error');
+          return;
+        }
+        if (scan && result.added > 0) {
+          showFeedback(videosFeedback, result.added + ' new video(s) detected.', 'success');
+        }
+        knownVideos = result.videos || [];
+        renderVideos(knownVideos);
+        populateSrcVideoSelect(knownVideos);
+      })
+      .catch(function(err) {
+        showFeedback(videosFeedback, 'Unexpected error: ' + err.message, 'error');
+      })
+      .finally(function() {
+        scanBtn.disabled = false;
+        videosLoading.classList.add('hidden');
+      });
+  }
+
+  function renderVideos(videos) {
+    videosList.innerHTML = '';
+    if (videos.length === 0) {
+      videosEmpty.classList.remove('hidden');
+      return;
+    }
+    videos.forEach(function(video) {
+      videosList.appendChild(createVideoRow(video));
+    });
+    videosList.classList.remove('hidden');
+  }
+
+  function createVideoRow(video) {
+    var statusColors = {
+      pending:    'bg-gray-100 text-gray-600',
+      processing: 'bg-yellow-100 text-yellow-700',
+      ready:      'bg-green-100 text-green-700',
+      error:      'bg-red-100 text-red-700',
+    };
+    var badgeClass = statusColors[video.status] || statusColors.pending;
+    var clipInfo   = video.status === 'ready' && video.clipCount > 0
+      ? video.clipCount + ' clip' + (video.clipCount !== 1 ? 's' : '') + ' generated'
+      : '';
+
+    var div = document.createElement('div');
+    div.className = 'flex items-center gap-3 p-3 border border-gray-200 rounded-lg';
+    div.innerHTML =
+      '<div class="flex-1 min-w-0">' +
+        '<p class="js-vid-name text-sm font-medium text-gray-800 truncate"></p>' +
+        '<div class="flex items-center gap-2 mt-1">' +
+          '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ' + badgeClass + '">' +
+            escapeHtml(video.status) + '</span>' +
+          (clipInfo ? '<span class="text-xs text-gray-400">' + escapeHtml(clipInfo) + '</span>' : '') +
+          (video.status === 'error' && video.errorMsg
+            ? '<span class="js-vid-err text-xs text-red-500 truncate"></span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="flex gap-2 shrink-0">' +
+        (video.status === 'pending' || video.status === 'error'
+          ? '<button class="js-generate-btn px-2.5 py-1.5 text-xs font-semibold text-white bg-blue-500 rounded-md hover:bg-blue-600 disabled:opacity-50 transition-colors">Generate</button>'
+          : (video.status === 'processing'
+            ? '<span class="text-xs text-yellow-600 px-2 py-1.5">Processing…</span>'
+            : '')) +
+        '<button class="js-delete-vid-btn text-gray-400 hover:text-red-500 transition-colors" aria-label="Remove">' +
+          '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">' +
+            '<path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>' +
+          '</svg>' +
+        '</button>' +
+      '</div>';
+
+    div.querySelector('.js-vid-name').textContent = video.fileName;
+    if (video.errorMsg) {
+      var errEl = div.querySelector('.js-vid-err');
+      if (errEl) errEl.textContent = video.errorMsg;
+    }
+
+    var generateBtn = div.querySelector('.js-generate-btn');
+    if (generateBtn) {
+      generateBtn.addEventListener('click', function() {
+        if (!confirm('Generate clips for "' + video.fileName + '"?\nThis triggers GitHub Actions — make sure clips are saved to the queue first.')) return;
+        generateBtn.disabled = true;
+        triggerClipGeneration(video.rowIndex, video.fileId, video.fileName)
+          .then(function(result) {
+            if (result.success) {
+              showFeedback(videosFeedback, result.message || 'Generation triggered.', 'success');
+              loadVideos(false);
+            } else {
+              showFeedback(videosFeedback, result.error || 'Failed to trigger.', 'error');
+              generateBtn.disabled = false;
+            }
+          })
+          .catch(function(err) {
+            showFeedback(videosFeedback, 'Unexpected error: ' + err.message, 'error');
+            generateBtn.disabled = false;
+          });
+      });
+    }
+
+    div.querySelector('.js-delete-vid-btn').addEventListener('click', function() {
+      if (!confirm('Remove "' + video.fileName + '" from tracking? The Drive file is not deleted.')) return;
+      deleteVideo(video.rowIndex)
+        .then(function(result) {
+          if (result.success) {
+            div.remove();
+            knownVideos = knownVideos.filter(function(v) { return v.rowIndex !== video.rowIndex; });
+            populateSrcVideoSelect(knownVideos);
+            if (videosList.children.length === 0) {
+              videosList.classList.add('hidden');
+              videosEmpty.classList.remove('hidden');
+            }
+          } else {
+            showFeedback(videosFeedback, result.error || 'Failed.', 'error');
+          }
+        });
+    });
+
+    return div;
+  }
+
+  function populateSrcVideoSelect(videos) {
+    var sel = srcVideoSelect;
+    var cur = sel.value;
+    sel.innerHTML = '<option value="">— no video linked (clips only) —</option>';
+    videos.forEach(function(v) {
+      var opt = document.createElement('option');
+      opt.value       = v.fileId;
+      opt.textContent = v.fileName;
+      sel.appendChild(opt);
+    });
+    sel.value = cur; // restore selection if still valid
+  }
+
+  scanBtn.addEventListener('click', function() { loadVideos(true); });
+
+  // ── Section 2: Analyse transcript ────────────────────────────────────────
 
   analyseBtn.addEventListener('click', function() {
-    var videoUrl   = document.getElementById('clipsVideoUrl').value.trim();
     var videoTitle = document.getElementById('clipsVideoTitle').value.trim();
     var transcript = document.getElementById('clipsTranscript').value.trim();
 
     if (!transcript) {
-      showFeedback(analyseFeedback, 'Please paste the video transcript first.', 'error');
+      showFeedback(analyseFeedback, 'Please paste the transcript or chapters first.', 'error');
       return;
     }
 
@@ -1544,7 +1699,7 @@ function nextCronFire(cron) {
           return;
         }
         pendingSuggestions = result.clips || [];
-        renderSuggestions(pendingSuggestions, videoUrl);
+        renderSuggestions(pendingSuggestions);
         suggestionsEl.classList.remove('hidden');
       })
       .catch(function(err) {
@@ -1556,7 +1711,7 @@ function nextCronFire(cron) {
       });
   });
 
-  function renderSuggestions(clips, videoUrl) {
+  function renderSuggestions(clips) {
     suggestionList.innerHTML = '';
     clips.forEach(function(clip, idx) {
       var div = document.createElement('div');
@@ -1564,34 +1719,36 @@ function nextCronFire(cron) {
       div.innerHTML =
         '<input type="checkbox" class="js-clip-check mt-0.5 accent-blue-500" checked>' +
         '<div class="flex-1 min-w-0">' +
-          '<p class="text-sm font-medium text-gray-800 js-clip-title"></p>' +
-          '<p class="text-xs text-gray-400 mt-0.5 js-clip-time"></p>' +
-          '<p class="text-xs text-gray-500 mt-1 js-clip-summary"></p>' +
+          '<p class="js-clip-title text-sm font-medium text-gray-800"></p>' +
+          '<p class="js-clip-time text-xs text-gray-400 mt-0.5"></p>' +
+          '<p class="js-clip-summary text-xs text-gray-500 mt-1"></p>' +
         '</div>';
-      div.querySelector('.js-clip-title').textContent  = clip.clipTitle || '(no title)';
-      div.querySelector('.js-clip-time').textContent   = clip.start + ' → ' + clip.end;
+      div.querySelector('.js-clip-title').textContent   = clip.clipTitle || '(no title)';
+      div.querySelector('.js-clip-time').textContent    = clip.start + ' → ' + clip.end;
       div.querySelector('.js-clip-summary').textContent = clip.summary || '';
       div.dataset.idx = idx;
       suggestionList.appendChild(div);
     });
   }
 
-  // ── Save selected clips to sheet ────────────────────────────────────────
+  // ── Save selected clips ──────────────────────────────────────────────────
 
   saveSelectedBtn.addEventListener('click', function() {
-    var videoUrl   = document.getElementById('clipsVideoUrl').value.trim();
-    var videoTitle = document.getElementById('clipsVideoTitle').value.trim();
-
-    if (!videoUrl) {
-      showFeedback(analyseFeedback, 'Please enter the YouTube URL before saving.', 'error');
-      return;
-    }
+    var videoTitle   = document.getElementById('clipsVideoTitle').value.trim();
+    var srcVideoId   = srcVideoSelect.value;
+    var srcVideoName = srcVideoId
+      ? (knownVideos.find(function(v) { return v.fileId === srcVideoId; }) || {}).fileName || ''
+      : '';
 
     var selected = [];
     suggestionList.querySelectorAll('.js-clip-check').forEach(function(cb) {
       if (cb.checked) {
         var idx = Number(cb.closest('[data-idx]').dataset.idx);
-        if (pendingSuggestions[idx]) selected.push(pendingSuggestions[idx]);
+        if (pendingSuggestions[idx]) {
+          var clip = Object.assign({}, pendingSuggestions[idx]);
+          clip.videoFileId = srcVideoId;
+          selected.push(clip);
+        }
       }
     });
 
@@ -1602,10 +1759,11 @@ function nextCronFire(cron) {
 
     saveSelectedBtn.disabled = true;
 
-    saveClips(videoUrl, videoTitle || 'Untitled video', selected)
+    saveClips(srcVideoName || videoTitle || 'Untitled', videoTitle || 'Untitled', selected)
       .then(function(result) {
         if (result.success) {
-          showFeedback(analyseFeedback, result.message || selected.length + ' clip(s) saved.', 'success');
+          showFeedback(analyseFeedback,
+            result.message || selected.length + ' clip(s) saved. Now click Generate on the video.', 'success');
           suggestionsEl.classList.add('hidden');
           document.getElementById('clipsTranscript').value = '';
           pendingSuggestions = [];
@@ -1622,7 +1780,7 @@ function nextCronFire(cron) {
       });
   });
 
-  // ── Clips queue ─────────────────────────────────────────────────────────
+  // ── Section 3: Clips queue ────────────────────────────────────────────────
 
   function loadQueue() {
     refreshBtn.disabled = true;
@@ -1732,6 +1890,7 @@ function nextCronFire(cron) {
 
   refreshBtn.addEventListener('click', loadQueue);
   window._loadClipsQueue = loadQueue;
+  window._loadVideosList = function() { loadVideos(false); };
 }());
 
 // ============================================================
@@ -2190,6 +2349,7 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('tabClipsBtn').addEventListener('click', function() {
     switchTab('clips');
     window._loadClipsQueue();
+    window._loadVideosList();
   });
 
   // Sidebar toggle (mobile)

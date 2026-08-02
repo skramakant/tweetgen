@@ -240,3 +240,39 @@ async function listClips() {
 async function deleteClip(rowIndex) {
   return gasPost({ action: 'deleteClip', rowIndex });
 }
+
+// ── Short Clips — video management ──────────────────────────────────────────
+
+/**
+ * Scans the Drive input folder for new videos and adds them to the videos sheet.
+ * @returns {Promise<{success, added, videos}>}
+ */
+async function scanInputFolder() {
+  return gasPost({ action: 'scanInputFolder' });
+}
+
+/**
+ * Returns all rows from the videos sheet.
+ * @returns {Promise<{success, videos}>}
+ */
+async function listVideos() {
+  return gasPost({ action: 'listVideos' });
+}
+
+/**
+ * Deletes a video row from the videos sheet.
+ * @param {number} rowIndex
+ */
+async function deleteVideo(rowIndex) {
+  return gasPost({ action: 'deleteVideo', rowIndex });
+}
+
+/**
+ * Triggers the shortclips GitHub Actions workflow for a specific video.
+ * @param {number} videoRowIndex
+ * @param {string} fileId
+ * @param {string} fileName
+ */
+async function triggerClipGeneration(videoRowIndex, fileId, fileName) {
+  return gasPost({ action: 'triggerClipGeneration', videoRowIndex, fileId, fileName });
+}

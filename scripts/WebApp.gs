@@ -87,6 +87,16 @@ function doPost(e) {
       result = handleDeleteClip(params);
     } else if (action === 'updateClipStatus') {
       result = handleUpdateClipStatus(params);
+    } else if (action === 'scanInputFolder') {
+      result = handleScanInputFolder();
+    } else if (action === 'listVideos') {
+      result = handleListVideos();
+    } else if (action === 'updateVideoStatus') {
+      result = handleUpdateVideoStatus(params);
+    } else if (action === 'deleteVideo') {
+      result = handleDeleteVideo(params);
+    } else if (action === 'triggerClipGeneration') {
+      result = handleTriggerClipGeneration(params);
     } else {
       result = { success: false, error: 'Unknown action: ' + action };
     }
@@ -940,5 +950,157 @@ function handleUpdateClipStatus(params) {
     return { success: true, message: 'Status updated to: ' + status };
   } catch (err) {
     return { success: false, error: 'Failed to update clip status: ' + err.message };
+  }
+}
+
+// ============================================================
+// Short Clips — video management handlers
+// ============================================================
+
+/**
+ * Scans the CLIP_INPUT_FOLDER_ID Drive folder for video files.
+ * Adds any new videos (not already in the videos sheet) as pending rows.
+ * @returns {{ success, added, videos }}
+ */
+function handleScanInputFolder() {
+  try {
+    var folderId = PropertiesService.getScriptProperties().getProperty('CLIP_INPUT_FOLDER_ID');
+    if (!folderId) {
+      return { success: false, error: 'CLIP_INPUT_FOLDER_ID not set in Script Properties.' };
+    }
+
+    var folder = DriveApp.getFolderById(folderId);
+    var files  = folder.getFiles();
+    var sheet  = getOrCreateVideoSheet();
+    var added  = 0;
+
+    while (files.hasNext()) {
+      var file = files.next();
+      var mime = file.getMimeType();
+      // Only process video files
+      if (mime.indexOf('video/') !== 0) continue;
+
+      var fileId   = file.getId();
+      var fileName = file.getName();
+
+      if (!isVideoAlreadyTracked(sheet, fileId)) {
+        addVideoRow(sheet, fileId, fileName);
+        added++;
+      }
+    }
+
+    var videos = getAllVideos(sheet);
+    return { success: true, added: added, videos: videos };
+  } catch (err) {
+    return { success: false, error: 'Failed to scan folder: ' + err.message };
+  }
+}
+
+/**
+ * Returns all rows from the videos sheet.
+ */
+function handleListVideos() {
+  try {
+    var sheet  = getOrCreateVideoSheet();
+    var videos = getAllVideos(sheet);
+    return { success: true, videos: videos };
+  } catch (err) {
+    return { success: false, error: 'Failed to list videos: ' + err.message };
+  }
+}
+
+/**
+ * Updates the status, clip count, and error of a video row.
+ * Called by process_clips.py via GAS API.
+ * @param {{ rowIndex, status, clipCount, errorMsg }} params
+ */
+function handleUpdateVideoStatus(params) {
+  try {
+    var rowIndex  = Number(params.rowIndex);
+    var status    = String(params.status    || '');
+    var clipCount = params.clipCount !== undefined ? Number(params.clipCount) : null;
+    var errorMsg  = String(params.errorMsg  || '');
+
+    if (!rowIndex || rowIndex < 2) {
+      return { success: false, error: 'Invalid row index.' };
+    }
+    var sheet = getOrCreateVideoSheet();
+    updateVideoRow(sheet, rowIndex, status, clipCount, errorMsg);
+    return { success: true, message: 'Video status updated.' };
+  } catch (err) {
+    return { success: false, error: 'Failed to update video status: ' + err.message };
+  }
+}
+
+/**
+ * Deletes a video row by row index.
+ * @param {{ rowIndex }} params
+ */
+function handleDeleteVideo(params) {
+  try {
+    var rowIndex = Number(params.rowIndex);
+    if (!rowIndex || rowIndex < 2) {
+      return { success: false, error: 'Invalid row index.' };
+    }
+    var sheet = getOrCreateVideoSheet();
+    deleteVideoRow(sheet, rowIndex);
+    return { success: true, message: 'Video deleted.' };
+  } catch (err) {
+    return { success: false, error: 'Failed to delete video: ' + err.message };
+  }
+}
+
+/**
+ * Triggers the shortclips GitHub Actions workflow for a specific video.
+ * Marks the video as 'processing' and dispatches the workflow via GitHub API.
+ * @param {{ videoRowIndex, fileId, fileName }} params
+ */
+function handleTriggerClipGeneration(params) {
+  try {
+    var videoRowIndex = Number(params.videoRowIndex);
+    var fileId        = String(params.fileId   || '').trim();
+    var fileName      = String(params.fileName || '').trim();
+
+    if (!fileId) return { success: false, error: 'fileId is required.' };
+
+    var githubToken = PropertiesService.getScriptProperties().getProperty('GITHUB_TOKEN');
+    var githubRepo  = PropertiesService.getScriptProperties().getProperty('GITHUB_REPO');
+
+    if (!githubToken) return { success: false, error: 'GITHUB_TOKEN not set in Script Properties.' };
+    if (!githubRepo)  return { success: false, error: 'GITHUB_REPO not set in Script Properties.' };
+
+    // Mark video as processing
+    if (videoRowIndex >= 2) {
+      var vSheet = getOrCreateVideoSheet();
+      updateVideoRow(vSheet, videoRowIndex, 'processing', null, '');
+    }
+
+    // Trigger GitHub Actions workflow
+    var url = 'https://api.github.com/repos/' + githubRepo +
+              '/actions/workflows/shortclips.yml/dispatches';
+
+    var response = UrlFetchApp.fetch(url, {
+      method:             'POST',
+      contentType:        'application/json',
+      headers: {
+        'Authorization': 'Bearer ' + githubToken,
+        'Accept':        'application/vnd.github.v3+json',
+      },
+      payload:            JSON.stringify({
+        ref:    'main',
+        inputs: { video_file_id: fileId, video_row_index: String(videoRowIndex) }
+      }),
+      muteHttpExceptions: true,
+    });
+
+    var code = response.getResponseCode();
+    if (code !== 204) {
+      return { success: false, error: 'GitHub API returned HTTP ' + code + ': ' +
+               response.getContentText().substring(0, 200) };
+    }
+
+    return { success: true, message: 'Clip generation triggered for ' + fileName };
+  } catch (err) {
+    return { success: false, error: 'Failed to trigger generation: ' + err.message };
   }
 }

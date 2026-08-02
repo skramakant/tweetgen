@@ -1,0 +1,55 @@
+name: Generate Short Clips
+
+on:
+  workflow_dispatch:
+    inputs:
+      video_file_id:
+        description: 'Google Drive file ID of the source video'
+        required: true
+      video_row_index:
+        description: 'Row index in the videos sheet'
+        required: true
+        default: '0'
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache apt packages (ffmpeg)
+        uses: awalsh128/cache-apt-pkgs-action@latest
+        with:
+          packages: ffmpeg
+          version: 1.0
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-shortclips-pip-${{ hashFiles('shortclips/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-shortclips-pip-
+
+      - name: Install Python dependencies
+        run: pip install -r shortclips/requirements.txt
+
+      - name: Generate clips
+        env:
+          GAS_URL:               ${{ secrets.GAS_URL }}
+          API_KEY:               ${{ secrets.API_KEY }}
+          CLIP_OUTPUT_FOLDER_ID: ${{ secrets.CLIP_OUTPUT_FOLDER_ID }}
+          GOOGLE_CLIENT_ID:      ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET:  ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN:  ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          VIDEO_FILE_ID:         ${{ github.event.inputs.video_file_id }}
+          VIDEO_ROW_INDEX:       ${{ github.event.inputs.video_row_index }}
+        run: python shortclips/process_clips.py

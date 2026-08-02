@@ -118,22 +118,22 @@ function getPendingRows(sheet) {
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
 
-  var rows    = sheet.getRange(2, 1, lastRow - 1, 10).getValues();
+  var rows    = sheet.getRange(2, 1, lastRow - 1, 12).getValues();
   var pending = [];
 
   rows.forEach(function(row, i) {
     if (String(row[AT_COL_STATUS - 1]) === 'pending') {
       pending.push({
-        rowIndex:   i + 2,
-        articleUrl: String(row[AT_COL_ARTICLE_URL - 1] || ''),
-        source:     String(row[AT_COL_SOURCE      - 1] || ''),
-        title:      String(row[AT_COL_TITLE       - 1] || ''),
-        tweetDraft: String(row[AT_COL_TWEET_DRAFT - 1] || ''),
-        status:     'pending',
-        fetchedAt:  String(row[AT_COL_FETCHED_AT  - 1] || ''),
-        category:   String(row[AT_COL_CATEGORY    - 1] || ''),
-        aiVerdict:  String(row[AT_COL_AI_VERDICT  - 1] || ''),
-        pollTweet:  String(row[AT_COL_POLL_TWEET  - 1] || ''),
+        rowIndex:    i + 2,
+        articleUrl:  String(row[AT_COL_ARTICLE_URL - 1] || ''),
+        source:      String(row[AT_COL_SOURCE      - 1] || ''),
+        title:       String(row[AT_COL_TITLE       - 1] || ''),
+        tweetDraft:  String(row[AT_COL_TWEET_DRAFT - 1] || ''),
+        status:      'pending',
+        fetchedAt:   String(row[AT_COL_FETCHED_AT  - 1] || ''),
+        category:    String(row[AT_COL_CATEGORY    - 1] || ''),
+        aiVerdict:   String(row[AT_COL_AI_VERDICT  - 1] || ''),
+        pollTweet:   String(row[AT_COL_POLL_TWEET  - 1] || ''),
       });
     }
   });
