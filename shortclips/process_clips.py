@@ -74,6 +74,8 @@ def gas_post(action, params=None):
         payload.update(params)
     r = requests.post(GAS_URL, json=payload,
                       headers={'Content-Type': 'text/plain'}, timeout=30)
+    print(f'  [gas_post] action={action} status={r.status_code}')
+    print(f'  [gas_post] raw response: {r.text[:500]}')
     r.raise_for_status()
     return r.json()
 
